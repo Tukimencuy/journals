@@ -1,47 +1,103 @@
-// src/actions/auth-actions.ts
-'use server'; // Menandakan ini adalah Server Action
+// app/(auth)/login/page.tsx
+'use client';
 
-import api from '@/lib/axios';
-import { TLoginSchema } from '@/validators/auth';
-import { cookies } from 'next/headers';
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Eye, EyeOff, Sprout } from 'lucide-react'; // Import ikon
 
-// Definisikan struktur data yang diharapkan dari API
-interface LoginSuccessResponse {
-  message: string;
-  token: string;
-  user: {
-    id: number;
-    name: string;
-    email: string;
-    role: 'User' | 'Admin';
+import { LoginSchema, TLoginSchema } from '@/validators/auth';
+import { loginUser } from '@/actions/auth-actions';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+export default function LoginPage() {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+  const [showPassword, setShowPassword] = useState(false); // State untuk toggle password
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<TLoginSchema>({
+    resolver: zodResolver(LoginSchema),
+  });
+
+  const onSubmit = (data: TLoginSchema) => {
+    setError(null);
+    startTransition(async () => {
+      const result = await loginUser(data);
+      if (result.success) {
+        router.push('/articles');
+        router.refresh();
+      } else {
+        setError(result.message);
+      }
+    });
   };
-}
 
-export async function loginUser(data: TLoginSchema) {
-  try {
-    const response = await api.post<LoginSuccessResponse>('/login', data);
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-slate-100 dark:bg-slate-900 p-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="items-center text-center">
+          {/* Ganti dengan Logo Anda */}
+          <div className="flex items-center gap-2 mb-4">
+            <Sprout className="h-8 w-8 text-blue-600" />
+            <span className="text-2xl font-bold tracking-tight">LogoIpsum</span>
+          </div>
+          {/* Judul dihilangkan agar fokus pada logo */}
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            <div className="space-y-2">
+              <Label htmlFor="email">Username</Label>
+              <Input
+                {...register('email')}
+                id="email"
+                type="email"
+                placeholder="Username"
+                className="py-6" // Membuat input lebih tinggi
+              />
+              {errors.email && <p className="text-sm text-red-500 pt-1">{errors.email.message}</p>}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  {...register('password')}
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="Password"
+                  className="py-6 pr-10" // Padding kanan untuk ikon
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-500">
+                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                </button>
+              </div>
+              {errors.password && <p className="text-sm text-red-500 pt-1">{errors.password.message}</p>}
+            </div>
 
-    const { token, user } = response.data;
+            {error && <p className="text-sm text-center text-red-500">{error}</p>}
 
-    // Simpan token di httpOnly cookie
-    cookies().set('auth_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      path: '/',
-    });
+            <Button type="submit" className="w-full py-6 text-base" disabled={isPending}>
+              {isPending ? 'Loading...' : 'Login'}
+            </Button>
 
-    // Simpan juga role pengguna untuk kemudahan di client
-    cookies().set('user_role', user.role, {
-      httpOnly: false, // Boleh diakses client
-      path: '/',
-    });
-
-    return { success: true, message: 'Login berhasil!', role: user.role };
-  } catch (error: any) {
-    return {
-      success: false,
-      message: error.response?.data?.message || 'Email atau password salah.',
-    };
-  }
+            <p className="text-center text-sm text-slate-600 dark:text-slate-400">
+              Don't have an account?{' '}
+              <Link href="/register" className="font-medium text-blue-600 hover:underline">
+                Register
+              </Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
